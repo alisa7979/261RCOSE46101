@@ -1,3 +1,5 @@
+"""Train RoBERTa for sarcasm detection. See Experiment config below."""
+
 import os
 import json
 
@@ -14,34 +16,48 @@ from transformers import (
     TrainingArguments,
 )
 
-from preprocess import preprocess_dataframe
+from preprocess import (
+    DATA_PATHS,
+    default_max_length,
+    make_experiment_name,
+    preprocess_dataframe,
+)
 
-
-# Model + preprocessing config
-MODEL_NAME = "roberta-base"
-USE_CONTEXT = False
-REMOVE_EMOJI = False
-
-# Data paths
-TRAIN_PATH = "../twitter_data/train.csv"
-VAL_PATH = "../twitter_data/val.csv"
 
 # Experiment config
-EXPERIMENT_NAME = "twitter_no_context_emoji"
+# Change these constants to switch runs.
+DATASET = "reddit"  # "reddit" or "twitter"
+USE_CONTEXT = True  # Reddit only; ignored for Twitter
+REMOVE_EMOJI = False  # True = strip emojis, False = keep emojis
 
-# Output config
+# Optional override; leave None to auto-generate from flags above
+EXPERIMENT_NAME = None
+
+# Model and training settings
+MODEL_NAME = "roberta-base"
+CLASS_WEIGHTS = (1.0, 3.0)
+
+if DATASET == "twitter" and USE_CONTEXT:
+    USE_CONTEXT = False
+
+EXPERIMENT_NAME = EXPERIMENT_NAME or make_experiment_name(
+    DATASET, use_context=USE_CONTEXT, remove_emoji=REMOVE_EMOJI
+)
+
+# Derived paths and experiment name
+TRAIN_PATH = DATA_PATHS[DATASET]["train"]
+VAL_PATH = DATA_PATHS[DATASET]["val"]
+MAX_LENGTH = default_max_length(USE_CONTEXT)
+
 OUTPUT_DIR = f"./results_{EXPERIMENT_NAME}"
 BEST_MODEL_DIR = f"./best_model_{EXPERIMENT_NAME}"
 
-# Training constants
-MAX_LENGTH = 128
-CLASS_WEIGHTS = (1.0, 3.0)
 
+# Load data
+train_df = pd.read_csv(TRAIN_PATH, encoding="utf-8")
+val_df = pd.read_csv(VAL_PATH, encoding="utf-8")
 
-train_df = pd.read_csv(TRAIN_PATH)
-val_df = pd.read_csv(VAL_PATH)
-
-# Preprocess datasets
+# Preprocess
 train_df = preprocess_dataframe(
     train_df,
     use_context=USE_CONTEXT,
@@ -57,6 +73,7 @@ val_df = preprocess_dataframe(
 tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
 
+# Tokenize and build datasets
 def tokenize(batch):
     """Tokenize text inputs for RoBERTa."""
     return tokenizer(
@@ -129,11 +146,12 @@ training_args = TrainingArguments(
     output_dir=OUTPUT_DIR,
     eval_strategy="epoch",
     save_strategy="epoch",
+    save_only_model=True,
     save_total_limit=1,
     learning_rate=2e-5,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
-    num_train_epochs=3,
+    num_train_epochs=10,
     weight_decay=0.01,
     logging_steps=50,
     load_best_model_at_end=True,
@@ -149,6 +167,7 @@ trainer = WeightedTrainer(
     compute_metrics=compute_metrics
 )
 
+# Train and save checkpoint
 train_result = trainer.train()
 
 trainer.save_model(BEST_MODEL_DIR)
@@ -156,6 +175,7 @@ tokenizer.save_pretrained(BEST_MODEL_DIR)
 
 metrics = trainer.evaluate()
 metrics["experiment"] = EXPERIMENT_NAME
+metrics["dataset"] = DATASET
 metrics["model_name"] = MODEL_NAME
 metrics["use_context"] = USE_CONTEXT
 metrics["remove_emoji"] = REMOVE_EMOJI
