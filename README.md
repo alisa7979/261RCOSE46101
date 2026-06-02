@@ -36,15 +36,15 @@ pip install torch transformers datasets scikit-learn pandas numpy
 
 ```bash
 # Preprocess data
-python source_code/preprocess.py
+python source_code_v2/preprocess.py
 
 # Train model
-python source_code/train.py
+python source_code_v2/train.py
 
 # Evaluate
-python source_code/evaluate.py
+python source_code_v2/evaluate.py
 ```
 
 ## Team
-Korea University — COSE461 Natural Language Processing, Spring 2025  
+Korea University — COSE461 Natural Language Processing, Spring 2026  
 Team 23
